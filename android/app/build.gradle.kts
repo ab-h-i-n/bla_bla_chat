@@ -1,16 +1,16 @@
 plugins {
     id("com.android.application")
     id("kotlin-android")
-    // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.example.bla_bla"
-    compileSdk = 36 // Updated for Google Sign-In compatibility
+    compileSdk = 36
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -20,26 +20,19 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.bla_bla"
-        minSdk = flutter.minSdkVersion  // Keep original if needed
-        targetSdk = flutter.targetSdkVersion  // Keep original if needed
-        targetSdk = 36 // Updated target SDK
+        minSdk = flutter.minSdkVersion
+        targetSdk = 36
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        // Add your Google Web Client ID here
         resValue("string", "default_web_client_id", "830134928616-rb2tnnnf11mnd0sk20hjnm5aco9hqqsq.apps.googleusercontent.com")
 
-        manifestPlaceholders += mapOf(
-            "appAuthRedirectScheme" to "io.supabase.flutterquickstart"
-        )
+        manifestPlaceholders["appAuthRedirectScheme"] = "io.supabase.flutterquickstart"
     }
 
     buildTypes {
-        release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
+        getByName("release") {
             signingConfig = signingConfigs.getByName("debug")
         }
     }
@@ -50,7 +43,8 @@ flutter {
 }
 
 dependencies {
-    // Only add if you continue to have credential manager issues
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    // Add if needed for Google Auth:
     // implementation("androidx.credentials:credentials:1.2.2")
     // implementation("androidx.credentials:credentials-play-services-auth:1.2.2")
     // implementation("com.google.android.gms:play-services-auth:21.0.0")
