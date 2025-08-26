@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
@@ -10,7 +12,7 @@ class UpdateChecker extends StatefulWidget {
   const UpdateChecker({Key? key, required this.child}) : super(key: key);
 
   @override
-  _UpdateCheckerState createState() => _UpdateCheckerState();
+  State<UpdateChecker> createState() => _UpdateCheckerState();
 }
 
 class _UpdateCheckerState extends State<UpdateChecker> {
@@ -20,7 +22,10 @@ class _UpdateCheckerState extends State<UpdateChecker> {
   @override
   void initState() {
     super.initState();
-    _checkForUpdate();
+    // We only want to check for updates on Android.
+    if (Platform.isAndroid) {
+      _checkForUpdate();
+    }
   }
 
   /// Checks for a new version of the app on the server.
@@ -48,7 +53,7 @@ class _UpdateCheckerState extends State<UpdateChecker> {
       }
     } catch (e) {
       // Log any errors during the update check
-      print('Error checking for update: $e');
+      debugPrint('Error checking for update: $e');
     }
   }
 
@@ -72,17 +77,17 @@ class _UpdateCheckerState extends State<UpdateChecker> {
       barrierDismissible: false, // User must choose an option
       builder: (BuildContext context) {
         return AlertDialog(
-          title: Text('Update Available'),
+          title: const Text('Update Available'),
           content: Text('A new version ($version) is available. Would you like to update?'),
           actions: <Widget>[
             TextButton(
-              child: Text('Later'),
+              child: const Text('Later'),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: Text('Update Now'),
+              child: const Text('Update Now'),
               onPressed: () {
                 Navigator.of(context).pop();
                 _downloadAndInstall(url);
@@ -97,33 +102,69 @@ class _UpdateCheckerState extends State<UpdateChecker> {
   /// Downloads and initiates the installation of the new APK.
   Future<void> _downloadAndInstall(String url) async {
     try {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Downloading update...')),
-      );
-
       // Use the ota_update package to download and install the new APK
-      OtaUpdate().execute(url).listen(
+      OtaUpdate().execute(url, destinationFilename: 'bla_bla_chat.apk').listen(
         (OtaEvent event) {
           switch (event.status) {
             case OtaStatus.DOWNLOADING:
-              print('Download progress: ${event.value}%');
+              // Show download progress in a SnackBar
+              final progress = event.value ?? '0';
+              _showProgressSnackBar('Downloading update: $progress%');
               break;
             case OtaStatus.INSTALLING:
-              print('Installing...');
+              // Hide the progress SnackBar and show an 'installing' message
+              _showProgressSnackBar('Download complete. Installing...');
               break;
             case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-              print('Install permission not granted');
-              // Optionally, show a dialog explaining why the permission is needed
+              // Show a dialog explaining the permission is needed
+              _showPermissionErrorDialog();
               break;
             default:
-              print('OTA Update Status: ${event.status}');
+              // Hide any SnackBars for other statuses
+              ScaffoldMessenger.of(context).hideCurrentSnackBar();
               break;
           }
         },
       );
     } catch (e) {
-      print('Failed to update. Error: $e');
+      debugPrint('Failed to update. Error: $e');
+      _showProgressSnackBar('Error: Failed to start update');
     }
+  }
+
+  /// Helper method to show and manage the progress SnackBar.
+  void _showProgressSnackBar(String message) {
+    // Ensure we are working with a valid context
+    if (mounted) {
+      // Hide any existing snackbar
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      // Show the new snackbar
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(message),
+          duration: const Duration(minutes: 5), // Keep it visible during download
+        ),
+      );
+    }
+  }
+
+  /// Helper method to show a dialog when install permissions are denied.
+  void _showPermissionErrorDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Permission Required'),
+        content: const Text(
+          'To update the app, you must allow installing from unknown sources in your phone\'s settings.',
+        ),
+        actions: [
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
