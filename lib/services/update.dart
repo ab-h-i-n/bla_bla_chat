@@ -5,7 +5,6 @@ import 'package:http/http.dart' as http;
 import 'package:ota_update/ota_update.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
-
 class UpdateChecker extends StatefulWidget {
   final Widget child;
 
@@ -86,16 +85,25 @@ class _UpdateCheckerState extends State<UpdateChecker> {
           ),
           actions: <Widget>[
             TextButton(
-              child: const Text('Later'),
+              child: Text(
+                'Later',
+                // Use theme color
+                style: TextStyle(color: Theme.of(context).primaryColor),
+              ),
               onPressed: () {
                 Navigator.of(context).pop();
               },
             ),
             TextButton(
-              child: const Text('Update Now'),
+              child: Text(
+                'Update Now',
+                // Use theme color
+                style: TextStyle(color: Theme.of(context).primaryColor),
+              ),
               onPressed: () {
                 Navigator.of(context).pop();
-                _downloadAndInstall(url);
+                // Pass the version to create a dynamic filename
+                _downloadAndInstall(url, version);
               },
             ),
           ],
@@ -105,17 +113,19 @@ class _UpdateCheckerState extends State<UpdateChecker> {
   }
 
   /// Initiates the download and shows the progress in a modal bottom sheet.
-  Future<void> _downloadAndInstall(String url) async {
+  Future<void> _downloadAndInstall(String url, String version) async {
     try {
       showModalBottomSheet(
         context: context,
-        isDismissible: false, // Prevents closing the sheet by tapping outside
-        enableDrag: false, // Prevents dragging the sheet down
+        isDismissible: false,
+        enableDrag: false,
         builder: (BuildContext context) {
-          // Pass the download stream to our custom progress widget
           return DownloadProgressSheet(
-            downloadStream:
-                OtaUpdate().execute(url, destinationFilename: 'app-release.apk'),
+            downloadStream: OtaUpdate().execute(
+              url,
+              // Use a dynamic filename based on the version
+              destinationFilename: 'app-v$version.apk',
+            ),
             onPermissionError: _showPermissionErrorDialog,
           );
         },
@@ -128,7 +138,7 @@ class _UpdateCheckerState extends State<UpdateChecker> {
 
   /// Shows a dialog when install permissions are denied.
   void _showPermissionErrorDialog() {
-    // Pop the bottom sheet if it's open
+    print('Permission error during APK installation.');
     if (Navigator.of(context).canPop()) {
       Navigator.of(context).pop();
     }
@@ -168,15 +178,12 @@ class _UpdateCheckerState extends State<UpdateChecker> {
 
   @override
   Widget build(BuildContext context) {
-    // This widget just wraps the child; the logic is in initState.
     return widget.child;
   }
 }
 
 //================================================================================
 // HELPER WIDGET: DownloadProgressSheet
-// This is the stateful widget that displays the download progress in the
-// modal bottom sheet.
 //================================================================================
 class DownloadProgressSheet extends StatefulWidget {
   final Stream<OtaEvent> downloadStream;
@@ -200,7 +207,7 @@ class _DownloadProgressSheetState extends State<DownloadProgressSheet> {
   void initState() {
     super.initState();
     widget.downloadStream.listen((OtaEvent event) {
-      if (!mounted) return; // Ensure widget is still in the tree
+      if (!mounted) return;
 
       setState(() {
         switch (event.status) {
@@ -215,7 +222,6 @@ class _DownloadProgressSheetState extends State<DownloadProgressSheet> {
             widget.onPermissionError();
             break;
           default:
-            // Handle other statuses like ALREADY_RUNNING_ERROR if needed
             debugPrint('OTA Update Status: ${event.status}');
             break;
         }
@@ -225,7 +231,6 @@ class _DownloadProgressSheetState extends State<DownloadProgressSheet> {
 
   @override
   Widget build(BuildContext context) {
-    // Parse progress for the LinearProgressIndicator
     final double progressValue = (double.tryParse(_progress) ?? 0.0) / 100.0;
 
     return Container(
@@ -256,4 +261,3 @@ class _DownloadProgressSheetState extends State<DownloadProgressSheet> {
     );
   }
 }
-
