@@ -1,8 +1,7 @@
-// FILE: lib/features/home/home_screen.dart
-
 import 'package:bla_bla/features/home/chat_section.dart';
 import 'package:bla_bla/features/home/requests_section.dart';
 import 'package:bla_bla/features/home/users_section.dart';
+import 'package:bla_bla/handlers/fcm_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -15,6 +14,16 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   final supabase = Supabase.instance.client;
+
+  // Add the initState method here
+  @override
+  void initState() {
+    super.initState();
+    // Create an instance of FcmHandler and call the initialization method
+    FcmHandler().initNotifications();
+
+ 
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,18 +41,14 @@ class _HomePageState extends State<HomePage> {
               onPressed: () async {
                 await supabase.auth.signOut();
               },
-            )
+            ),
           ],
         ),
         // Using TabBarView brings back the swipe gesture between tabs.
         // To keep each tab's state alive, you will need to modify each
         // of the section widgets (ChatsSection, etc.) as explained below.
         body: const TabBarView(
-          children: [
-            ChatsSection(),
-            RequestsSection(),
-            UsersSection(),
-          ],
+          children: [ChatsSection(), RequestsSection(), UsersSection()],
         ),
         bottomNavigationBar: const Material(
           color: Colors.black,

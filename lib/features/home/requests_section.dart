@@ -1,9 +1,11 @@
-// FILE: lib/features/home/requests_section.dart
-
+import 'package:bla_bla/handlers/notification_handler.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models.dart';
 import '../../widgets/user_avatar.dart';
+
+// sendNotificationToUser(userId: userId, title: title, body: body)
+
 
 class RequestsSection extends StatefulWidget {
   const RequestsSection({super.key});
@@ -12,20 +14,22 @@ class RequestsSection extends StatefulWidget {
   State<RequestsSection> createState() => _RequestsSectionState();
 }
 
-class _RequestsSectionState extends State<RequestsSection> 
+class _RequestsSectionState extends State<RequestsSection>
     with AutomaticKeepAliveClientMixin {
-  
+
   // This prevents the widget from being disposed when switching tabs
   @override
   bool get wantKeepAlive => true;
-  
+
   final _supabase = Supabase.instance.client;
   late final Stream<List<Map<String, dynamic>>> _requestsStream;
+  Profile? _currentUserProfile; // To store the current user's profile
 
   @override
   void initState() {
     super.initState();
     _initializeStream();
+    _loadCurrentUserProfile(); // Load current user's profile for notifications
   }
 
   void _initializeStream() {
@@ -40,12 +44,44 @@ class _RequestsSectionState extends State<RequestsSection>
     });
   }
 
-  Future<void> _acceptRequest(String requestId) async {
+  // Fetches the current user's profile to use their name in notifications
+  Future<void> _loadCurrentUserProfile() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      final response =
+          await _supabase.from('profiles').select().eq('id', userId).single();
+      if (mounted) {
+        setState(() {
+          _currentUserProfile = Profile.fromMap(response);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading current user profile: $e");
+    }
+  }
+
+  Future<void> _acceptRequest(Map<String, dynamic> request) async {
+    final requestId = request['id'];
+    final recipientId = request['recipient_id']; // Using recipientId as requested
+
     try {
       await _supabase
           .from('friend_requests')
           .update({'status': 'accepted'}).eq('id', requestId);
-      
+
+      // --- 🚀 SEND NOTIFICATION ON ACCEPT ---
+      if (recipientId != null) {
+        final currentUserName = _currentUserProfile?.fullName ?? 'Someone';
+        await sendNotificationToUser(
+          // UPDATED: Using recipientId as the target userId
+          userId: recipientId,
+          title: '✅ Friend Request Accepted',
+          body: '$currentUserName accepted your friend request.',
+        );
+      }
+      // ------------------------------------
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -68,12 +104,26 @@ class _RequestsSectionState extends State<RequestsSection>
     }
   }
 
-  Future<void> _declineRequest(String requestId) async {
+  Future<void> _declineRequest(Map<String, dynamic> request) async {
+    final requestId = request['id'];
+    final recipientId = request['recipient_id']; // Using recipientId as requested
     try {
       await _supabase
           .from('friend_requests')
           .update({'status': 'declined'}).eq('id', requestId);
-      
+
+      // --- 🚀 SEND NOTIFICATION ON DECLINE ---
+      if (recipientId != null) {
+        final currentUserName = _currentUserProfile?.fullName ?? 'Someone';
+        await sendNotificationToUser(
+          // UPDATED: Using recipientId as the target userId
+          userId: recipientId,
+          title: '❌ Friend Request Declined',
+          body: '$currentUserName declined your friend request.',
+        );
+      }
+      // -------------------------------------
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -100,7 +150,7 @@ class _RequestsSectionState extends State<RequestsSection>
   Widget build(BuildContext context) {
     // IMPORTANT: Call super.build(context) when using AutomaticKeepAliveClientMixin
     super.build(context);
-    
+
     return StreamBuilder<List<Map<String, dynamic>>>(
       stream: _requestsStream,
       builder: (context, snapshot) {
@@ -131,7 +181,7 @@ class _RequestsSectionState extends State<RequestsSection>
             ),
           );
         }
-        
+
         final requests = snapshot.data ?? [];
         if (requests.isEmpty) {
           return const Center(
@@ -171,8 +221,9 @@ class _RequestsSectionState extends State<RequestsSection>
                 // Add a unique key to prevent state mix-ups
                 key: ValueKey(request['id']),
                 request: request,
-                onAccept: () => _acceptRequest(request['id']),
-                onDecline: () => _declineRequest(request['id']),
+                // Pass the whole request map to the handlers
+                onAccept: () => _acceptRequest(request),
+                onDecline: () => _declineRequest(request),
               );
             },
           ),
@@ -198,13 +249,13 @@ class RequestListTile extends StatefulWidget {
   State<RequestListTile> createState() => _RequestListTileState();
 }
 
-class _RequestListTileState extends State<RequestListTile> 
+class _RequestListTileState extends State<RequestListTile>
     with AutomaticKeepAliveClientMixin {
-  
+
   // Keep individual request tiles alive to prevent re-fetching profile data
   @override
   bool get wantKeepAlive => true;
-  
+
   final _supabase = Supabase.instance.client;
   Future<Profile?>? _senderProfileFuture;
   Profile? _senderProfile;
@@ -228,7 +279,7 @@ class _RequestListTileState extends State<RequestListTile>
 
       final response =
           await _supabase.from('profiles').select().eq('id', senderId).single();
-      
+
       _senderProfile = Profile.fromMap(response);
       return _senderProfile;
     } catch (e) {
@@ -239,13 +290,13 @@ class _RequestListTileState extends State<RequestListTile>
 
   void _handleAccept() {
     if (_isProcessing) return;
-    
+
     setState(() {
       _isProcessing = true;
     });
-    
+
     widget.onAccept();
-    
+
     // Reset processing state after a short delay
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
@@ -258,19 +309,20 @@ class _RequestListTileState extends State<RequestListTile>
 
   void _handleDecline() {
     if (_isProcessing) return;
-    
+
     setState(() {
       _isProcessing = true;
     });
-    
+
     widget.onDecline();
-    
+
     // Reset processing state after a short delay
     Future.delayed(const Duration(milliseconds: 500), () {
       if (mounted) {
         setState(() {
           _isProcessing = false;
         });
+
       }
     });
   }
@@ -279,7 +331,7 @@ class _RequestListTileState extends State<RequestListTile>
   Widget build(BuildContext context) {
     // IMPORTANT: Call super.build(context) when using AutomaticKeepAliveClientMixin
     super.build(context);
-    
+
     return FutureBuilder<Profile?>(
       future: _senderProfileFuture,
       builder: (context, snapshot) {
@@ -329,7 +381,7 @@ class _RequestListTileState extends State<RequestListTile>
 
         final sender = snapshot.data!;
         final requestTime = DateTime.tryParse(widget.request['created_at'] ?? '');
-        final timeAgo = requestTime != null 
+        final timeAgo = requestTime != null
             ? _getTimeAgo(requestTime)
             : '';
 

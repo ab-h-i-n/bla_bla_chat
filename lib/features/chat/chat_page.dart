@@ -1,6 +1,7 @@
 // FILE: lib/features/chat/chat_page.dart
 
 import 'dart:async';
+import 'package:bla_bla/handlers/notification_handler.dart'; // 1. IMPORT ADDED
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -31,6 +32,7 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
   bool _isTyping = false;
   bool _isSending = false;
   late AnimationController _typingAnimationController;
+  Profile? _currentUserProfile; // 2. ADDED TO STORE SENDER'S PROFILE
 
   @override
   void initState() {
@@ -41,7 +43,25 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
     )..repeat();
 
     _initializeMessagesStream();
+    _loadCurrentUserProfile(); // 3. ADDED TO FETCH PROFILE ON INITIALIZATION
     _messageInputController.addListener(_onTypingChanged);
+  }
+
+  // Fetches the current user's profile to use their name in notifications
+  Future<void> _loadCurrentUserProfile() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      final response =
+          await _supabase.from('profiles').select().eq('id', userId).single();
+      if (mounted) {
+        setState(() {
+          _currentUserProfile = Profile.fromMap(response);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading current user profile: $e");
+    }
   }
 
   void _initializeMessagesStream() {
@@ -110,6 +130,16 @@ class _ChatPageState extends State<ChatPage> with TickerProviderStateMixin {
         'sender_id': _supabase.auth.currentUser!.id,
         'conversation_id': widget.conversationId,
       });
+
+      // --- 🚀 SEND NOTIFICATION ON NEW MESSAGE ---
+      final senderName = _currentUserProfile?.fullName ?? 'New Message';
+      await sendNotificationToUser(
+        userId: widget.recipient.id,
+        title: senderName,
+        body: content,
+      );
+      // ------------------------------------------
+
     } catch (e) {
       // Restore message if failed
       _messageInputController.text = content;
@@ -427,12 +457,12 @@ class ChatBubble extends StatelessWidget {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.grey[300],
+                    color: Colors.grey[800],
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Text(
                     formatTime(message.createdAt),
-                    style: const TextStyle(fontSize: 12, color: Colors.grey),
+                    style: const TextStyle(fontSize: 12, color: Colors.white70),
                   ),
                 ),
               ),
@@ -471,7 +501,7 @@ class ChatBubble extends StatelessWidget {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.black.withOpacity(0.2),
                           blurRadius: 4,
                           offset: const Offset(0, 2),
                         ),
@@ -557,7 +587,7 @@ class _MessageBar extends StatelessWidget {
         color: Colors.black,
         boxShadow: [
           BoxShadow(
-            color: Colors.white.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.2),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -624,7 +654,7 @@ class _MessageBar extends StatelessWidget {
                           child: CircularProgressIndicator(
                             strokeWidth: 2,
                             valueColor: AlwaysStoppedAnimation<Color>(
-                              Colors.white,
+                              Colors.black,
                             ),
                           ),
                         )

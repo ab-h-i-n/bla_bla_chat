@@ -1,10 +1,10 @@
+import 'dart:convert';
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
-import 'dart:convert';
-import 'package:package_info_plus/package_info_plus.dart';
 import 'package:ota_update/ota_update.dart';
+import 'package:package_info_plus/package_info_plus.dart';
+
 
 class UpdateChecker extends StatefulWidget {
   final Widget child;
@@ -17,7 +17,8 @@ class UpdateChecker extends StatefulWidget {
 
 class _UpdateCheckerState extends State<UpdateChecker> {
   // IMPORTANT: Replace this URL with the actual URL of your version.json file
-  final String _versionUrl = 'https://raw.githubusercontent.com/ab-h-i-n/bla_bla_chat/main/version.json';
+  final String _versionUrl =
+      'https://raw.githubusercontent.com/ab-h-i-n/bla_bla_chat/main/version.json';
 
   @override
   void initState() {
@@ -43,7 +44,9 @@ class _UpdateCheckerState extends State<UpdateChecker> {
         String latestVersion = json['version'];
         String apkUrl = json['apk_url'];
 
-        debugPrint('Current version: $currentVersion, Latest version: $latestVersion');
+        debugPrint(
+          'Current version: $currentVersion, Latest version: $latestVersion',
+        );
 
         // Compare the server version with the current installed version
         if (_isNewerVersion(latestVersion, currentVersion)) {
@@ -78,7 +81,9 @@ class _UpdateCheckerState extends State<UpdateChecker> {
       builder: (BuildContext context) {
         return AlertDialog(
           title: const Text('Update Available'),
-          content: Text('A new version ($version) is available. Would you like to update?'),
+          content: Text(
+            'A new version ($version) is available. Would you like to update?',
+          ),
           actions: <Widget>[
             TextButton(
               child: const Text('Later'),
@@ -99,57 +104,34 @@ class _UpdateCheckerState extends State<UpdateChecker> {
     );
   }
 
-  /// Downloads and initiates the installation of the new APK.
+  /// Initiates the download and shows the progress in a modal bottom sheet.
   Future<void> _downloadAndInstall(String url) async {
     try {
-      // Use the ota_update package to download and install the new APK
-      OtaUpdate().execute(url, destinationFilename: 'bla_bla_chat.apk').listen(
-        (OtaEvent event) {
-          switch (event.status) {
-            case OtaStatus.DOWNLOADING:
-              // Show download progress in a SnackBar
-              final progress = event.value ?? '0';
-              _showProgressSnackBar('Downloading update: $progress%');
-              break;
-            case OtaStatus.INSTALLING:
-              // Hide the progress SnackBar and show an 'installing' message
-              _showProgressSnackBar('Download complete. Installing...');
-              break;
-            case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
-              // Show a dialog explaining the permission is needed
-              _showPermissionErrorDialog();
-              break;
-            default:
-              // Hide any SnackBars for other statuses
-              ScaffoldMessenger.of(context).hideCurrentSnackBar();
-              break;
-          }
+      showModalBottomSheet(
+        context: context,
+        isDismissible: false, // Prevents closing the sheet by tapping outside
+        enableDrag: false, // Prevents dragging the sheet down
+        builder: (BuildContext context) {
+          // Pass the download stream to our custom progress widget
+          return DownloadProgressSheet(
+            downloadStream:
+                OtaUpdate().execute(url, destinationFilename: 'app-release.apk'),
+            onPermissionError: _showPermissionErrorDialog,
+          );
         },
       );
     } catch (e) {
       debugPrint('Failed to update. Error: $e');
-      _showProgressSnackBar('Error: Failed to start update');
+      _showErrorDialog('Failed to start update: $e');
     }
   }
 
-  /// Helper method to show and manage the progress SnackBar.
-  void _showProgressSnackBar(String message) {
-    // Ensure we are working with a valid context
-    if (mounted) {
-      // Hide any existing snackbar
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      // Show the new snackbar
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(message),
-          duration: const Duration(minutes: 5), // Keep it visible during download
-        ),
-      );
-    }
-  }
-
-  /// Helper method to show a dialog when install permissions are denied.
+  /// Shows a dialog when install permissions are denied.
   void _showPermissionErrorDialog() {
+    // Pop the bottom sheet if it's open
+    if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -167,9 +149,111 @@ class _UpdateCheckerState extends State<UpdateChecker> {
     );
   }
 
+  /// Shows a generic error dialog.
+  void _showErrorDialog(String message) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Update Error'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            child: const Text('OK'),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    // This widget just wraps the child, the magic happens in initState
+    // This widget just wraps the child; the logic is in initState.
     return widget.child;
   }
 }
+
+//================================================================================
+// HELPER WIDGET: DownloadProgressSheet
+// This is the stateful widget that displays the download progress in the
+// modal bottom sheet.
+//================================================================================
+class DownloadProgressSheet extends StatefulWidget {
+  final Stream<OtaEvent> downloadStream;
+  final VoidCallback onPermissionError;
+
+  const DownloadProgressSheet({
+    Key? key,
+    required this.downloadStream,
+    required this.onPermissionError,
+  }) : super(key: key);
+
+  @override
+  State<DownloadProgressSheet> createState() => _DownloadProgressSheetState();
+}
+
+class _DownloadProgressSheetState extends State<DownloadProgressSheet> {
+  String _progress = '0';
+  String _statusMessage = 'Starting download...';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.downloadStream.listen((OtaEvent event) {
+      if (!mounted) return; // Ensure widget is still in the tree
+
+      setState(() {
+        switch (event.status) {
+          case OtaStatus.DOWNLOADING:
+            _progress = event.value ?? '0';
+            _statusMessage = 'Downloading update: $_progress%';
+            break;
+          case OtaStatus.INSTALLING:
+            _statusMessage = 'Download complete. Installing...';
+            break;
+          case OtaStatus.PERMISSION_NOT_GRANTED_ERROR:
+            widget.onPermissionError();
+            break;
+          default:
+            // Handle other statuses like ALREADY_RUNNING_ERROR if needed
+            debugPrint('OTA Update Status: ${event.status}');
+            break;
+        }
+      });
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Parse progress for the LinearProgressIndicator
+    final double progressValue = (double.tryParse(_progress) ?? 0.0) / 100.0;
+
+    return Container(
+      padding: const EdgeInsets.all(24.0),
+      height: 200,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Downloading Update',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 20),
+          Text(_statusMessage),
+          const SizedBox(height: 10),
+          LinearProgressIndicator(
+            value: progressValue,
+            minHeight: 8,
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Please keep the app open.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

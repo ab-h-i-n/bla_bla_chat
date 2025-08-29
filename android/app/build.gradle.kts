@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("kotlin-android")
     id("dev.flutter.flutter-gradle-plugin")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -26,7 +27,6 @@ android {
         versionCode = flutter.versionCode
         versionName = flutter.versionName
 
-        resValue("string", "default_web_client_id", "830134928616-rb2tnnnf11mnd0sk20hjnm5aco9hqqsq.apps.googleusercontent.com")
 
         manifestPlaceholders["appAuthRedirectScheme"] = "io.supabase.flutterquickstart"
     }
@@ -44,6 +44,7 @@ flutter {
 
 dependencies {
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
+    implementation(platform("com.google.firebase:firebase-bom:34.1.0"))
     // Add if needed for Google Auth:
     // implementation("androidx.credentials:credentials:1.2.2")
     // implementation("androidx.credentials:credentials-play-services-auth:1.2.2")

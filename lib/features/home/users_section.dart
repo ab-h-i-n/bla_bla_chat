@@ -1,5 +1,6 @@
 // FILE: lib/features/home/users_section.dart
 
+import 'package:bla_bla/handlers/notification_handler.dart'; // 1. IMPORT ADDED
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../models.dart';
@@ -13,22 +14,41 @@ class UsersSection extends StatefulWidget {
   State<UsersSection> createState() => _UsersSectionState();
 }
 
-class _UsersSectionState extends State<UsersSection> 
+class _UsersSectionState extends State<UsersSection>
     with AutomaticKeepAliveClientMixin {
-  
+
   // This prevents the widget from being disposed when switching tabs
   @override
   bool get wantKeepAlive => true;
-  
+
   final _supabase = Supabase.instance.client;
   late Future<List<UserWithStatus>> _usersFuture;
   List<UserWithStatus>? _cachedUsers;
   bool _isRefreshing = false;
+  Profile? _currentUserProfile; // 2. ADDED TO STORE CURRENT USER'S PROFILE
 
   @override
   void initState() {
     super.initState();
     _usersFuture = _fetchUsersWithStatus();
+    _loadCurrentUserProfile(); // 3. ADDED TO FETCH PROFILE ON INITIALIZATION
+  }
+
+  // Fetches the current user's profile to use their name in notifications
+  Future<void> _loadCurrentUserProfile() async {
+    try {
+      final userId = _supabase.auth.currentUser?.id;
+      if (userId == null) return;
+      final response =
+          await _supabase.from('profiles').select().eq('id', userId).single();
+      if (mounted) {
+        setState(() {
+          _currentUserProfile = Profile.fromMap(response);
+        });
+      }
+    } catch (e) {
+      debugPrint("Error loading current user profile: $e");
+    }
   }
 
   Future<List<UserWithStatus>> _fetchUsersWithStatus({bool useCache = true}) async {
@@ -101,7 +121,7 @@ class _UsersSectionState extends State<UsersSection>
     setState(() {
       _isRefreshing = true;
     });
-    
+
     try {
       _cachedUsers = null; // Clear cache
       final users = await _fetchUsersWithStatus(useCache: false);
@@ -122,7 +142,15 @@ class _UsersSectionState extends State<UsersSection>
         'sender_id': currentUserId,
         'recipient_id': recipientId,
       });
-      
+
+      // --- 🚀 SEND NOTIFICATION ON NEW REQUEST ---
+      final senderName = _currentUserProfile?.fullName ?? 'Someone';
+      await sendNotificationToUser(
+          userId: recipientId,
+          title: '💌 You have a new friend request!',
+          body: '$senderName wants to be your friend.');
+      // ------------------------------------------
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -132,7 +160,7 @@ class _UsersSectionState extends State<UsersSection>
           ),
         );
       }
-      
+
       // Refresh the data to show updated status
       await _refreshUsers();
     } catch (e) {
@@ -150,7 +178,7 @@ class _UsersSectionState extends State<UsersSection>
 
   Future<void> _startChat(BuildContext context, Profile friendProfile) async {
     final currentUserId = _supabase.auth.currentUser!.id;
-    
+
     // Show loading indicator
     showDialog(
       context: context,
@@ -159,7 +187,7 @@ class _UsersSectionState extends State<UsersSection>
         child: CircularProgressIndicator(),
       ),
     );
-    
+
     try {
       // Find existing conversation or create new one
       final response = await _supabase
@@ -187,7 +215,7 @@ class _UsersSectionState extends State<UsersSection>
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
-        
+
         // Navigate to the chat page
         Navigator.of(context).push(
           MaterialPageRoute(
@@ -202,7 +230,7 @@ class _UsersSectionState extends State<UsersSection>
       // Close loading dialog
       if (mounted) {
         Navigator.of(context).pop();
-        
+
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Error starting chat: $e'),
@@ -228,7 +256,7 @@ class _UsersSectionState extends State<UsersSection>
           child: Chip(
             label: Text(
               'Sent',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
+              style: TextStyle(fontSize: 12, color: Colors.white),
             ),
             backgroundColor: Colors.grey,
           ),
@@ -239,7 +267,7 @@ class _UsersSectionState extends State<UsersSection>
           child: Chip(
             label: Text(
               'Pending',
-              style: TextStyle(fontSize: 12, color: Colors.orange),
+              style: TextStyle(fontSize: 12, color: Colors.white),
             ),
             backgroundColor: Colors.orange,
           ),
@@ -264,14 +292,14 @@ class _UsersSectionState extends State<UsersSection>
   Widget build(BuildContext context) {
     // IMPORTANT: Call super.build(context) when using AutomaticKeepAliveClientMixin
     super.build(context);
-    
+
     return FutureBuilder<List<UserWithStatus>>(
       future: _usersFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
         }
-        
+
         if (snapshot.hasError) {
           return Center(
             child: Column(
@@ -292,7 +320,7 @@ class _UsersSectionState extends State<UsersSection>
             ),
           );
         }
-        
+
         final users = snapshot.data ?? [];
         if (users.isEmpty) {
           return RefreshIndicator(
@@ -345,10 +373,10 @@ class _UsersSectionState extends State<UsersSection>
                   ),
                 ),
                 ...friends.map((userWithStatus) => UserListTile(
-                  key: ValueKey('friend_${userWithStatus.profile.id}'),
-                  userWithStatus: userWithStatus,
-                  trailingWidget: _buildTrailingWidget(userWithStatus),
-                )),
+                    key: ValueKey('friend_${userWithStatus.profile.id}'),
+                    userWithStatus: userWithStatus,
+                    trailingWidget: _buildTrailingWidget(userWithStatus),
+                  )),
                 const Divider(),
               ],
               if (others.isNotEmpty) ...[
@@ -364,10 +392,10 @@ class _UsersSectionState extends State<UsersSection>
                   ),
                 ),
                 ...others.map((userWithStatus) => UserListTile(
-                  key: ValueKey('user_${userWithStatus.profile.id}'),
-                  userWithStatus: userWithStatus,
-                  trailingWidget: _buildTrailingWidget(userWithStatus),
-                )),
+                    key: ValueKey('user_${userWithStatus.profile.id}'),
+                    userWithStatus: userWithStatus,
+                    trailingWidget: _buildTrailingWidget(userWithStatus),
+                  )),
               ],
             ],
           ),
@@ -390,7 +418,7 @@ class UserListTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final user = userWithStatus.profile;
-    
+
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       elevation: 1,
